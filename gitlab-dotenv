@@ -1,0 +1,137 @@
+#!/bin/env python3
+'''Tool to synchronize Gitlab CI variables with a local file'''
+import argparse
+import configparser
+import csv
+import os
+import pathlib
+from gitlab_dotenv import GitlabDotenv
+from gitlab_variable import GitlabVariable
+
+class GitlabDotenvCsv:
+    '''CSV data format helper for GitlabDotenv'''
+    def __init__(self, dotenv: GitlabDotenv):
+        self.dotenv = dotenv
+
+    def write(self, file_name):
+        '''Export dotenv to csv file'''
+        with open(file_name, 'w', newline='') as csv_file:
+            field_names = GitlabVariable.keys()
+            csv_writer = csv.DictWriter(csv_file, fieldnames=field_names, quoting=csv.QUOTE_ALL)
+            csv_writer.writeheader()
+            for variable in self.dotenv.all():
+                csv_writer.writerow(variable.data)
+
+    def read(self, file_name, delete=False):
+        '''Import dotenv from csv file'''
+        with open(file_name, newline='') as csv_file:
+            field_names = GitlabVariable.keys()
+            csv_reader = csv.DictReader(csv_file, fieldnames=field_names)
+            next(csv_reader) # Skip header
+            for row in csv_reader:
+                if delete is False:
+                    self.dotenv.add(GitlabVariable(row))
+                else:
+                    self.dotenv.remove(GitlabVariable(row))
+
+
+def get_argparser():
+    '''Set up command line argument reader'''
+    par = argparse.ArgumentParser(description='Synchronize Gitlab CI variables with a local file')
+
+    par.add_argument('action', choices=['push', 'pull'], help="Action to perform")
+    par.add_argument('csv', metavar="FILE", help="CSV file to use as local storage")
+
+    par.add_argument('-u', dest="url", metavar="URL", help='''
+                        Gitlab project URL.
+                        If not provided the program tries to guess it using git remote "origin"
+                     ''')
+    par.add_argument('-t', dest="token", metavar="TOKEN", help='''
+                        Gitlab token with API rights.
+                        You can provide this in .gitlab-dotenv-token or
+                        ~/.config/gitlab-dotenv/token as well
+                     ''')
+
+    par.add_argument('-m', '--allow-modify', action='store_true',
+                     help="Modify existing variables if changed locally (push only)")
+    par.add_argument('-d', '--allow-delete', action='store_true',
+                     help="Delete variables if missing locally (push only)")
+    par.add_argument('-a', '--allow-all', action='store_true',
+                     help="Same as --allow-modify --allow-delete")
+    par.add_argument('--remove', action='store_true',
+                     help="Remove every local variable from remote storage (push only)")
+
+    return par
+
+def get_args():
+    '''Read command line arguments'''
+    argparser = get_argparser()
+    args = argparser.parse_args()
+
+    args.url = args.url or get_url_from_git()
+    args.token = args.token or get_token()
+
+    if args.allow_all is True:
+        args.allow_modify = True
+        args.allow_delete = True
+
+    if args.url is None:
+        argparser.error('Could not find URL')
+    if args.token is None:
+        argparser.error('Could not find TOKEN')
+
+    if args.remove is True and any([args.allow_modify, args.allow_delete]):
+        argparser.error('--remove can not be used with --allow-modify or --allow-delete')
+
+    if args.action == 'pull' and any([args.allow_modify, args.allow_delete, args.remove]):
+        argparser.error('Action "pull" does not support --allow-modify, --allow-delete, --remove')
+
+    return args
+
+def get_url_from_git(file_path=os.path.join('.git', 'config'), remote='origin'):
+    '''Try to find project URL in git config'''
+    cfg = configparser.ConfigParser()
+    cfg.read(file_path)
+    uri = cfg.get(f'remote "{remote}"', 'url', fallback=None)
+    if uri is not None:
+        if uri.endswith('.git'):
+            uri = uri[:-4]
+        if not uri.startswith('http'):
+            parts = uri.split('@', 1)[-1].split(':', 1)
+            uri = f'https://{parts[0]}/{parts[1]}'
+    return uri
+
+def get_config_dir():
+    '''Get the user-specific configuration directory for the program'''
+    config = os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME")
+    config = pathlib.Path(config) if config else pathlib.Path.home() / ".config"
+    return config / "gitlab-dotenv"
+
+def get_token():
+    '''Get the pre-configured token'''
+    for file_path in ['.gitlab-dotenv-token', get_config_dir() / "token"]:
+        if not os.path.isfile(file_path):
+            continue
+        with open(file_path, 'r') as token_file:
+            return token_file.read().replace('\n', '')
+    return None
+
+def main():
+    '''Main entrypoint'''
+    args = get_args()
+    dotenv = GitlabDotenv(args.url, args.token)
+
+    if args.csv is not None:
+        dotenv_csv = GitlabDotenvCsv(dotenv)
+        if args.action == 'pull':
+            dotenv.pull()
+            dotenv_csv.write(args.csv)
+        if args.action == 'push':
+            if args.remove is True:
+                dotenv.pull()
+            dotenv_csv.read(args.csv, delete=args.remove)
+            dotenv.push(allow_update=args.allow_modify, allow_delete=args.allow_delete|args.remove)
+
+
+if __name__ == "__main__":
+    main()

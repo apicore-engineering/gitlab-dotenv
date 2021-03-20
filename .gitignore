@@ -1,0 +1,4 @@
+__pycache__/
+.env
+.gitlab-dotenv-token
+*.csv
