@@ -40,7 +40,9 @@ def get_argparser():
     par = argparse.ArgumentParser(description='Synchronize Gitlab CI variables with a local file')
 
     par.add_argument('action', choices=['push', 'pull'], help="Action to perform")
-    par.add_argument('csv', metavar="FILE", help="CSV file to use as local storage")
+    par.add_argument('csv', metavar="FILE", nargs='?', default="gitlab-dotenv.csv", help='''
+                        CSV file to use as local storage. Default value is "gitlab-dotenv.csv"
+                    ''')
 
     par.add_argument('-u', dest="url", metavar="URL", help='''
                         Gitlab project URL.
