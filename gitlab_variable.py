@@ -35,7 +35,9 @@ class GitlabVariable:
             "value": "",
             "protected": False,
             "masked": False,
+            "raw": False,
             "environment_scope": "*",
+            "description": "",
         }
 
     @property
