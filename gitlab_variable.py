@@ -11,6 +11,8 @@ class GitlabVariable:
             value = data.get(key, self.data[key])
             if isinstance(self.data[key], bool):
                 value = value in ("true", "True", "TRUE", True)
+            if value is None:
+                value = ""
             self.data[key] = value
 
     def __eq__(self, other):
