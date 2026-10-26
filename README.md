@@ -17,7 +17,7 @@ positional arguments:
 optional arguments:
   -h, --help          show this help message and exit
   -u URL              Gitlab project URL. If not provided the program tries to guess it using git remote "origin"
-  -t TOKEN            Gitlab token with API rights. You can provide this in .gitlab-dotenv-token or ~/.config/gitlab-dotenv/token as well
+  -t TOKEN            Gitlab token with CI/CD variable permissions. You can provide this in .gitlab-dotenv-token or ~/.config/gitlab-dotenv/token as well
   -m, --allow-modify  Modify existing variables if changed locally (push only)
   -d, --allow-delete  Delete variables if missing locally (push only)
   -a, --allow-all     Same as --allow-modify --allow-delete
